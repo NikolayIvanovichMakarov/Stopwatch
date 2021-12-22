@@ -24,12 +24,6 @@ void start()
 	gettimeofday(&g_start, NULL);
 }
 
-void print_current_time()
-{
-	gettimeofday(&g_stop, NULL);
-	printf("sec: %lu usec: %lu \n", (g_stop.tv_sec - g_start.tv_sec), (g_stop.tv_usec - g_start.tv_usec)); 
-}
-
 uint8_t g_b_tmr_run = 1;
 uint8_t g_b_paused = 0;
 uint8_t g_b_runned = 0;
