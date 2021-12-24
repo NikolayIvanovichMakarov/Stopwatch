@@ -12,19 +12,6 @@ typedef enum stopwatch_e
 	sw_paused
 } stopwatch_t;
 
-stopwatch_t g_current_state;
-
-time_t g_current_time;
-struct tm* g_p_time_info;
-
-struct timeval g_start;
-struct timeval g_stop;
-struct timeval g_accumulated_time = {0, 0};
-
-void start()
-{
-	gettimeofday(&g_start, NULL);
-}
 
 uint8_t g_b_tmr_run = 1;
 uint8_t g_b_paused = 0;
@@ -34,25 +21,52 @@ uint8_t g_b_cleared = 0;
 void * thrd_timer_main_cycle()
 {
 	long int sec,usec,min,hour;
+	struct timeval start;
+	struct timeval stop;
+	struct timeval accumulated_time = {0, 0};
+	stopwatch_t current_state;
+
+	#define CLEAR_TIMER()\
+		accumulated_time.tv_sec = 0;\
+		accumulated_time.tv_usec = 0;\
+		hour = 0;\
+		min = 0;\
+		sec = 0;\
+		usec = 0;
+
+	#define START_STOPWATCH()\
+		gettimeofday(&start, NULL);
+
+	#define PRINT_TIME()\
+		clear();\
+		printw("hour: %ld min: %ld sec: %ld usec: %ld\n",hour, min, sec, usec);\
+		refresh();
+
 	while(g_b_tmr_run)
 	{
-		switch(g_current_state)
+		switch(current_state)
 		{
 			case sw_waiting:
 				if (g_b_paused == 1)
+				{
 					g_b_paused = 0;
-				if (g_b_runned == 1)
+				}
+				else if (g_b_cleared == 1)
+				{
+					g_b_cleared = 0;
+				}
+				else if (g_b_runned == 1)
 				{
 					g_b_runned = 0;
-					g_current_state = sw_running;
-					start();
+					current_state = sw_running;
+					START_STOPWATCH();
 				}
 			break;
 			case sw_running:
-				gettimeofday(&g_stop, NULL);
+				gettimeofday(&stop, NULL);
 
-				sec  = ((g_stop.tv_sec - g_start.tv_sec) + g_accumulated_time.tv_sec);
-				usec = ((g_stop.tv_usec - g_start.tv_usec) + g_accumulated_time.tv_usec);
+				sec  = ((stop.tv_sec - start.tv_sec) + accumulated_time.tv_sec);
+				usec = ((stop.tv_usec - start.tv_usec) + accumulated_time.tv_usec);
 				
 				if (usec > 1000000)
 				{
@@ -64,63 +78,56 @@ void * thrd_timer_main_cycle()
 					sec = sec-1;
 					usec = usec + 1000000;
 				}
-				if (g_b_paused == 1)
+
+				if (g_b_runned == 1)
+				{
+					g_b_runned = 0;
+				}
+				else if (g_b_paused == 1)
 				{
 					g_b_paused = 0;
-					g_accumulated_time.tv_sec = sec;
-					g_accumulated_time.tv_usec = usec;
-
-					g_current_state = sw_paused;
+					accumulated_time.tv_sec = sec;
+					accumulated_time.tv_usec = usec;
+					current_state = sw_paused;
 				}
 				else if (g_b_cleared == 1)
 				{
 					g_b_cleared = 0;
-					g_current_state = sw_waiting;
-					g_accumulated_time.tv_sec = 0;
-					g_accumulated_time.tv_usec = 0;
-					hour = 0;
-					min = 0;
-					sec = 0;
-					usec = 0;
+					//current_state = sw_waiting;
+
+					//CLEAR_TIMER();
+					START_STOPWATCH();
 				}
-
-				min = sec / 60;
-				hour = min / 60;
-				hour = hour % 24;
-				min = min % 60;
-				sec = sec % 60;
-
-				clear();
-				printw("hour: %ld min: %ld sec: %ld usec: %ld \n",hour, min, sec, usec);
-				refresh();
-				
-				usleep(10000);
+				else
+				{
+					min = sec / 60;
+					hour = min / 60;
+					hour = hour % 24;
+					min = min % 60;
+					sec = sec % 60;
+					
+					PRINT_TIME();
+					usleep(10000);
+				}
 			break;
 			case sw_paused:
 				if (g_b_paused == 1)
-					g_b_paused = 0;
-				if (g_b_cleared == 1)
 				{
-					min = 0;
-					hour = 0;
-					hour = 0;
-					min = 0;
-					sec = 0;
-					usec = 0;
-					g_accumulated_time.tv_usec = 0;
-					g_accumulated_time.tv_sec = 0;
-
-					clear();
-					printw("hour: %ld min: %ld sec: %ld usec: %ld \n",hour, min, sec, usec);
-					refresh();
-
-					g_b_cleared = 0;
+					g_b_paused = 0;
 				}
-				if (g_b_runned == 1)
+				else if (g_b_cleared == 1)
+				{
+					g_b_cleared = 0;
+
+					CLEAR_TIMER();
+					PRINT_TIME();
+				} 
+				else if (g_b_runned == 1)
 				{
 					g_b_runned = 0;
-					g_current_state = sw_running;
-					start();
+					current_state = sw_running;
+
+					START_STOPWATCH();
 				}
 			break;
 			default:
@@ -129,17 +136,15 @@ void * thrd_timer_main_cycle()
 	}
 	pthread_exit(0);
 }
+
 int main()
 {
 	pthread_t thrd_timer;
 	pthread_attr_t attr;
 	pthread_attr_init(&attr);
-	char str[20];
-	char ch;
 	pthread_create(&thrd_timer, &attr, thrd_timer_main_cycle, NULL);
 	uint8_t main_program = 1;
-
-
+	char ch;
 
 	initscr();
 	keypad(stdscr, true); 
@@ -168,7 +173,6 @@ int main()
 			break;
 		}
 	}
-
 
 	endwin();
 	return 0;
